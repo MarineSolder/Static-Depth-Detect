@@ -1,0 +1,68 @@
+LICENSE AGREEMENT
+Copyright (c) 2026 MarineSolder. All rights reserved.
+
+By downloading, copying, or using this project, you agree to the terms and
+conditions detailed below.
+
+                    TERMS AND CONDITIONS
+0. Definitions
+
+"The Project" refers to the "Static Depth Detect" shader source code,
+including "StaticDetect.fx" and all related files.
+
+"The Author" refers to MarineSolder, the original creator of this
+project and its source code.
+
+"Modification" means any change to the source code or assets of the Project.
+
+"Commercial Use" means using the Project for any purpose intended for economic
+gain, including but not limited to paid services, bundled software, or
+monetized media content.
+
+1. Permitted Use and Redistribution
+
+You are granted a non-exclusive right to use and redistribute this Project for
+PERSONAL, NON-COMMERCIAL purposes only. Any public redistribution must include
+this original copyright notice and the full text of this license.
+
+2. Private Modifications
+
+Users are allowed to create private modifications of this project for personal
+use without explicit permission.
+
+3. Public Modifications and GitHub Policy
+
+STRICT LIMITATION: Public redistribution of modified versions of this Project
+is strictly forbidden, except through the official GitHub contribution
+process (e.g., Pull Requests to the original repository).
+
+Any public redistribution of a modified version outside of the official
+Author's GitHub repository requires explicit written permission from the Author.
+
+4. Commercial Usage
+
+Any form of COMMERCIAL USE of this Project or its parts is strictly forbidden
+without a separate, explicit commercial license and written permission from
+the Author. This includes using the shader as part of a monetized software
+package, paid "Remaster" mods, or for-profit visual enhancement services.
+
+5. Usage in Other Projects
+
+Using parts of this Project's source code as part of another original project
+requires explicit permission from the Author. Furthermore, the Project, its
+Author, and the specific parts used must be clearly credited.
+
+6. Liability
+
+The Project is provided "as is", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose and noninfringement. In no event shall the
+Author or copyright holders be liable for any claim, damages or other
+liability, whether in an action of contract, tort or otherwise, arising from,
+out of or in connection with the Project or the use or other dealings in the
+Project.
+
+7. Disclaimer
+
+This License and its terms are subject to change and review at any time by
+the Author.
