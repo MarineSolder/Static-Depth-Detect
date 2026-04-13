@@ -1,10 +1,9 @@
-<h1>Static Depth Detect (High-Precision)</h1>
+<h1>Static Depth Detect (Ultra-Precision)</h1>
 
 <p>
   <strong>Version:</strong> 0.1a (Batman: Arkham Asylum version)<br>
   <strong>Author:</strong> MarineSolder © 2026<br>
-   <strong>License:</strong> Proprietary<br>
-  <strong>Requied:</strong> Reshade 5.0+
+  <strong>License:</strong> Proprietary<br>
 </p>
 
 <hr>
@@ -23,7 +22,7 @@
   This shader functions as a trigger system that monitors the scene's depth buffer state with extreme sensitivity to automatically toggle off intrusive effects when rendering freezes.
 </p>
 <p>
-  The shader implements a <strong>scan-points system</strong> sampling specific coordinates to detect even minor pixel-level shifts in depth.:
+  The shader implements a <strong>scan-points system</strong> sampling specific coordinates to detect even minor pixel-level shifts in depth.
 </p>
 
 <h2>Current Implementation & Compatibility</h2>
@@ -32,3 +31,9 @@
   <li><strong>Status:</strong> Highly stable for the aforementioned title.</li>
   <li><strong>Future Plans:</strong> Looking into adapting the logic for other legacy titles where similar depth-state issues occur.</li>
 </ul>
+
+<h2>Requirements</h2>
+<ul>
+  <li><strong>ReShade:</strong> 5.0 or higher.</li>
+  <li><strong>Generic Depth:</strong> Depth Addon must be enabled in ReShade's settings.</li>
+  <li><strong>Buffer Polarity:</strong> The depth input must have the correct reading polarity (ReShade_Depth_Input_Is_Reversed) to ensure the surveillance system can accurately track scene state changes.</li>
