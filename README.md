@@ -3,6 +3,7 @@
 <p>
   <strong>Version:</strong> 0.1a (Batman: Arkham Asylum version)<br>
   <strong>Author:</strong> MarineSolder © 2026<br>
+   <strong>License:</strong> Proprietary<br>
   <strong>Requied:</strong> Reshade 5.0+
 </p>
 
