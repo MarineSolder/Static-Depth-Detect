@@ -4,7 +4,8 @@ Copyright (c) 2026 MarineSolder. All rights reserved.
 By downloading, copying, or using this project, you agree to the terms and
 conditions detailed below.
 
-                    TERMS AND CONDITIONS
+                         TERMS AND CONDITIONS
+
 0. Definitions
 
 "The Project" refers to the "Static Depth Detect" shader source code,
@@ -19,40 +20,44 @@ project and its source code.
 gain, including but not limited to paid services, bundled software, or
 monetized media content.
 
-1. Permitted Use and Redistribution
+1. Grant of Rights
 
-You are granted a non-exclusive right to use and redistribute this Project for
-PERSONAL, NON-COMMERCIAL purposes only. Any public redistribution must include
-this original copyright notice and the full text of this license.
+The Author hereby grants to any person obtaining a copy of the Project the 
+following non‑exclusive, royalty‑free rights, subject to the terms of this License:
 
-2. Private Modifications
+  - Personal Use: You may copy, download, and use the Project for personal, 
+    non‑commercial purposes.
 
-Users are allowed to create private modifications of this project for personal
-use without explicit permission.
+  - Non‑Commercial Redistribution: You may redistribute unmodified copies of the 
+    Project for non‑commercial purposes, provided that this original copyright notice 
+    and the full text of this License are included in all copies.
 
-3. Public Modifications and GitHub Policy
+2. Public Modifications and GitHub Policy
 
-STRICT LIMITATION: Public redistribution of modified versions of this Project
-is strictly forbidden, except through the official GitHub contribution
-process (e.g., Pull Requests to the original repository).
+Public redistribution of modified versions of the Project, including the creation of 
+forks (even for the purpose of submitting Pull Requests), is strictly forbidden.
+The only permitted method for submitting modifications to the Project is by 
+submitting a Pull Request directly to the original Author’s GitHub repository. 
+All Pull Requests must be targeted at the main branch.
 
-Any public redistribution of a modified version outside of the official
-Author's GitHub repository requires explicit written permission from the Author.
+After review by the Author, accepted Pull Requests will be merged into the main 
+branch of the original repository. No other form of public distribution of modified 
+code is permitted without explicit written permission from the Author.
 
-4. Commercial Usage
+3. Commercial Usage
 
-Any form of COMMERCIAL USE of this Project or its parts is strictly forbidden
+Any form of commercial use of this Project or its parts is strictly forbidden
 without a separate, explicit commercial license and written permission from
 the Author. This includes using the shader as part of a monetized software
 package, paid "Remaster" mods, or for-profit visual enhancement services.
 
-5. Usage in Other Projects
+4. Usage in Other Projects
 
 Using parts of this Project's source code as part of another original project
 requires explicit permission from the Author. Furthermore, the Project, its
 Author, and the specific parts used must be clearly credited.
 
-6. Liability
+5. Liability
 
 The Project is provided "as is", without warranty of any kind, express or
 implied, including but not limited to the warranties of merchantability,
@@ -61,8 +66,3 @@ Author or copyright holders be liable for any claim, damages or other
 liability, whether in an action of contract, tort or otherwise, arising from,
 out of or in connection with the Project or the use or other dealings in the
 Project.
-
-7. Disclaimer
-
-This License and its terms are subject to change and review at any time by
-the Author.
