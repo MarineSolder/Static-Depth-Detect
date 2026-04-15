@@ -1,7 +1,7 @@
-<h1>Static Depth Detect (Ultra-Precision)</h1>
+<h1>Static Depth Detect</h1>
 
 <p>
-  <strong>Version:</strong> 0.1a (Batman: Arkham Asylum version)<br>
+  <strong>Version:</strong> 0.3a<br>
   <strong>Author:</strong> MarineSolder © 2026<br>
   <strong>License:</strong> Proprietary<br>
 </p>
@@ -10,30 +10,22 @@
 
 <h2>The Problem</h2>
 <p>
-  In many legacy titles, the 3D scene completely freezes during menu navigation or FMV (video) playback. Standard <strong>ReShade</strong> depth-based effects (like Bloom or Ambient Occlusion) often fail to detect these transitions because the depth buffer remains static but valid when the engine pauses 3D rendering for 2D overlays. This leads to significant visual artifacts:
+  In many legacy titles, the 3D scene completely freezes during Menu navigation or FMV (video) playback. Advanced <strong>ReShade</strong> depth-based shaders (like Bloom, Ambient Occlusion or Ray Casting) often can't detect these transitions because they are not designed for such a task. This leads to significant visual artifacts:
 </p>
 <ul>
   <li><strong>Bloom Overlays:</strong> Intense light bleeding that distorts the UI and menu elements.</li>
-  <li><strong>Ambient Occlusion/Shadowing:</strong> Shader-generated shadows appearing "on top" of 2D video sequences or menu items.</li>
+  <li><strong>Ambient Occlusion/Shadowing:</strong> Shader-generated shadows appearing "on top" of FMV sequences or Menu items.</li>
 </ul>
 
 <h2>The Solution: Static Depth Detection</h2>
 <p>
-  This shader functions as a trigger system that monitors the scene's depth buffer state with extreme sensitivity to automatically toggle off intrusive effects when rendering freezes.
+  This shader tries to detect the scene's depth state through a <strong>scan points system</strong> with extreme precision and functions as a trigger to automatically toggle desired effects off/on when 3D rendering freezes.
 </p>
-<p>
-  The shader implements a <strong>scan-points system</strong> sampling specific coordinates to detect even minor pixel-level shifts in depth.
-</p>
-
-<h2>Current Implementation & Compatibility</h2>
-<ul>
-  <li><strong>Target Game:</strong> Currently optimized specifically for <strong>Batman: Arkham Asylum</strong>.</li>
-  <li><strong>Status:</strong> Highly stable for the aforementioned title.</li>
-  <li><strong>Future Plans:</strong> Looking into adapting the logic for other legacy titles where similar depth-state issues occur.</li>
-</ul>
 
 <h2>Requirements</h2>
 <ul>
   <li><strong>ReShade:</strong> 5.0 or higher.</li>
+  <li><strong>Anti-Aliasing:</strong> Disable MSAA in game settings for depth detection to work.</li>
   <li><strong>Generic Depth:</strong> Depth Addon must be enabled in ReShade's settings.</li>
-  <li><strong>Buffer Polarity:</strong> The depth input must have the correct reading polarity (ReShade_Depth_Input_Is_Reversed) to ensure the surveillance system can accurately track scene state changes.</li>
+  <li><strong>Buffer Polarity:</strong> The depth input must have the correct polarity (RESADE_DEPTH_INPUT_IS_REVERSED) to track depth state changes.</li>
+  
