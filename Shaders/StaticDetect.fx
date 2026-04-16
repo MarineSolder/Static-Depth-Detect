@@ -1,16 +1,17 @@
 // --------------------------------------------------------------------
 //  Shader name:  Static Depth Detect
 // --------------------------------------------------------------------
-//  Version:      0.3a
+//  Version:      0.3b
 //  Author:       MarineSolder © 2026
 //  License:      Proprietary
 //  Source:       https://github.com/MarineSolder/Static-Depth-Detect
 // --------------------------------------------------------------------
-// Technical Requirements & Limitations:
-// - Disable MSAA in game settings for depth detection to work.
+// Requirements & Limitations:
+// - Anti-Aliasing: Disable MSAA in game settings for depth detection
+//   to work.
 // - Generic Depth: Depth Addon must be enabled in ReShade's settings.
-// - Buffer Polarity: The depth input must have the correct polarity
-//   (RESADE_DEPTH_INPUT_IS_REVERSED) to track depth state changes.
+// - Depth Input: The depth input must have the correct polarity
+//   (RESHADE_DEPTH_INPUT_IS_REVERSED) to track depth state changes.
 // - Hardware Compatibility: Nvidia GTX 900 series or newer
 //                           AMD RX 400 series or newer
 //                           Intel HD Graphics 500 or newer
@@ -18,17 +19,33 @@
 
 #include "ReShade.fxh"
 
+#ifndef RESHADE_DEPTH_INPUT_IS_LOGARITHMIC
+    #define RESHADE_DEPTH_INPUT_IS_LOGARITHMIC 0
+#endif
+
+#ifndef RESHADE_DEPTH_INPUT_IS_REVERSED
+    #define RESHADE_DEPTH_INPUT_IS_REVERSED 0
+#endif
+
+#ifndef RESHADE_DEPTH_LINEARIZATION_FAR_PLANE
+    #define RESHADE_DEPTH_LINEARIZATION_FAR_PLANE 1000.0
+#endif
+
+#ifndef RESHADE_DEPTH_MULTIPLIER
+    #define RESHADE_DEPTH_MULTIPLIER 1
+#endif
+
 // ------- UI -------
 
 uniform int Info <
     ui_category = "Info";
     ui_label = " ";
     ui_type = "radio";
-    ui_text = "Shader: Static Depth Detect v0.3a\n"
+    ui_text = "Shader: Static Depth Detect v0.3b\n"
               "Author: MarineSolder © 2026\n\n"
               "In many legacy titles, the 3D scene completely freezes during Menu\n"
               "navigation or FMV playback. This shader tries to detect depth state and\n"
-              "automatically toggles off/on scene effects (e.g., Bloom, AO, RT)\n"
+              "automatically toggles off/on scene effects (e.g. Bloom, AO, RT)\n"
               "to prevent interference with Menu or FMV.\n\n"
               "USAGE ORDER:\n"
               "1. StaticDepth_Detect -> Place at the VERY TOP.\n"
@@ -82,32 +99,59 @@ uniform bool ShowScanPoints <
     ui_label = "Show Scan Points (Yellow Dots)"; 
 > = true;
 
-// ------- HELPERS -------
+// ------- CONSTANTS & TABLES -------
 
-#define MAX_PTS (PointsGrid == 0 ? 24 : (PointsGrid == 1 ? 96 : (PointsGrid == 2 ? 384 : 2400)))
+#define TOTAL_PTS (PointsGrid == 0 ? 24 : (PointsGrid == 1 ? 96 : (PointsGrid == 2 ? 384 : 2400)))
 #define MAX_WIDTH 2400
 
 static const float GridColsTable[4] = { 6.0f, 12.0f, 24.0f, 60.0f };
 static const float GridRowsTable[4] = { 4.0f, 8.0f, 16.0f, 40.0f };
+static const float GridMargin   = 0.05f;
+static const float GridArea     = 0.90f;
 
 static const float BoostTable[5] = { 1.0f, 10.0f, 100.0f, 1000.0f, 10000.0f };
 
-float2 GetScanPoint(const uint i, const int mode)
+// ------- HELPERS -------
+
+float GetCustomLinearDepth(float2 uv)
+{
+    float depth = tex2Dlod(ReShade::DepthBuffer, float4(uv, 0, 0)).x;
+    depth *= (float)RESHADE_DEPTH_MULTIPLIER;
+
+    #if RESHADE_DEPTH_INPUT_IS_LOGARITHMIC
+        const float LogPrecision = 0.01f;
+        depth = (exp(depth * log(LogPrecision + 1.0f)) - 1.0f) / LogPrecision;
+    #endif
+
+    #if RESHADE_DEPTH_INPUT_IS_REVERSED
+        depth = 1.0f - depth;
+    #endif
+
+    const float farPlane = (float)RESHADE_DEPTH_LINEARIZATION_FAR_PLANE;
+    const float nearPlane = 1.0f;
+
+    depth /= farPlane - depth * (farPlane - nearPlane);
+
+    return saturate(depth);
+}
+
+float2 GetScanPoint(const uint pointIndex, const int mode)
 {
     const int gridIndex = clamp(mode, 0, 3);
 
     const float gridCols = GridColsTable[gridIndex];
     const float colIntervals = gridCols - 1.0f;
     const float rowIntervals = GridRowsTable[gridIndex] - 1.0f;
-    const float fI = (float)i + 0.0001f;
 
-    const float row = floor(fI / gridCols);
-    const float col = floor(fI - (row * gridCols));
+    const float offsetIndex = (float)pointIndex + 0.0001f;
 
-    return float2(0.05f + (col / colIntervals) * 0.90f, 0.05f + (row / rowIntervals) * 0.90f);
+    const float row = floor(offsetIndex / gridCols);
+    const float col = floor(offsetIndex - (row * gridCols));
+
+    return float2(GridMargin + (col / colIntervals) * GridArea, GridMargin + (row / rowIntervals) * GridArea);
 }
 
-// ------- STORAGE -------
+// ------- TEXTURES -------
 
 texture MS_CleanTex { Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = RGBA8; };
 sampler MS_CleanSampler { Texture = MS_CleanTex; };
@@ -132,16 +176,16 @@ void PS_Detection(float4 pos : SV_Position, float2 uv : TEXCOORD, out float4 out
     const float sens_static = 0.0001f;
     const float sens_active  = 0.0002f;
 
-    const bool isStatic = (lastState.a > 0.5f);
+    const bool isStatic = (lastState.w > 0.5f);
     const float currentSens = isStatic ? sens_active : sens_static;
 
     [loop]
-    for (uint i = 0; i < MAX_PTS; i++)
+    for (uint pointIndex = 0; pointIndex < TOTAL_PTS; pointIndex++)
     {
-        const float2 pointPos = GetScanPoint(i, PointsGrid);
+        const float2 pointPos = GetScanPoint(pointIndex, PointsGrid);
 
-        const float depthCurrent = (float)ReShade::GetLinearizedDepth(pointPos);
-        const float depthPrevious = (float)tex2Dfetch(MS_PointsSampler, int4(i, 0, 0, 0)).r;
+        const float depthCurrent = GetCustomLinearDepth(pointPos);
+        const float depthPrevious = tex2Dfetch(MS_PointsSampler, int4(pointIndex, 0, 0, 0)).x;
         const float depthDiff = abs(depthCurrent - depthPrevious) * boost;
 
         if (depthDiff > currentSens)
@@ -164,7 +208,7 @@ void PS_Detection(float4 pos : SV_Position, float2 uv : TEXCOORD, out float4 out
         staticCounter = max(staticCounter - (float)ReleaseSpeed, 0.0f);
     }
 
-    float triggerState = lastState.a;
+    float triggerState = lastState.w;
     if (staticCounter >= maxCounter) triggerState = 1.0f;
 
     else if (staticCounter <= (float)DelayFrames) triggerState = 0.0f;
@@ -179,11 +223,11 @@ void PS_Sync(float4 pos : SV_Position, float2 uv : TEXCOORD, out float4 outState
 
 void PS_StorePoints(float4 pos : SV_Position, float2 uv : TEXCOORD, out float4 outPoint : SV_Target)
 {
-    const uint i = (uint)pos.x;
+    const uint pointIndex = (uint)pos.x;
 
-    if (i < (uint)MAX_PTS)
+    if (pointIndex < (uint)TOTAL_PTS)
     {
-        outPoint = float4((float)ReShade::GetLinearizedDepth(GetScanPoint(i, PointsGrid)), 0.0f, 0.0f, 0.0f);
+        outPoint = float4(GetCustomLinearDepth(GetScanPoint(pointIndex, PointsGrid)), 0.0f, 0.0f, 0.0f);
     }
     else
     {
@@ -199,7 +243,7 @@ void PS_Capture(float4 pos : SV_Position, float2 uv : TEXCOORD, out float4 outCo
 void PS_Toggle(float4 pos : SV_Position, float2 uv : TEXCOORD, out float4 outColor : SV_Target)
 {
     const float4 state = tex2Dfetch(MS_StateSamplerB, int4(0, 0, 0, 0));
-    const bool isStatic = (state.a > 0.5f);
+    const bool isStatic = (state.w > 0.5f);
 
     if (isStatic)
     {
@@ -213,15 +257,15 @@ void PS_Toggle(float4 pos : SV_Position, float2 uv : TEXCOORD, out float4 outCol
         outColor = tex2D(ReShade::BackBuffer, uv);
     }
 
-        if (ShowScanPoints)
+    if (ShowScanPoints)
     {
         const int gridIndex = clamp(PointsGrid, 0, 3);
-        const float2 intervals = float2(GridColsTable[gridIndex] - 1.0f, GridRowsTable[gridIndex] - 1.0f);
+        const float2 gridGaps = float2(GridColsTable[gridIndex] - 1.0f, GridRowsTable[gridIndex] - 1.0f);
         const float2 screenRes = float2(BUFFER_WIDTH, BUFFER_HEIGHT);
-
-        float2 nearestIdx = round(((uv - 0.05f) / 0.90f) * intervals);
-        nearestIdx = clamp(nearestIdx, 0.0f, intervals);
-        const float2 targetUV = 0.05f + (nearestIdx / intervals) * 0.90f;
+        
+        float2 nearestIndex = round(((uv - GridMargin) / GridArea) * gridGaps);
+        nearestIndex = clamp(nearestIndex, 0.0f, gridGaps);
+        const float2 targetUV = GridMargin + (nearestIndex / gridGaps) * GridArea;
 
         const float2 distPixels = abs(uv - targetUV) * screenRes;
         if (distPixels.x < 2.0f && distPixels.y < 2.0f) 
