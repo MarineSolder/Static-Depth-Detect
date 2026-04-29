@@ -1,6 +1,6 @@
 <h1>Static Depth Detect</h1>
 <p>
-  <strong>Version:</strong> 0.4a<br>
+  <strong>Version:</strong> 0.5a<br>
   <strong>Author:</strong> MarineSolder © 2026<br>
   <strong>License:</strong> Proprietary<br>
 </p>
@@ -10,8 +10,8 @@
   In many legacy titles, the 3D scene completely freezes during Menu navigation or FMV (video) playback. Advanced <strong>ReShade</strong> depth-based shaders (like Depth of Field, Ambient Occlusion or Ray Casting) often can't detect these transitions because they are not designed for such a task. This leads to significant visual artifacts:
 </p>
 <ul>
-  <li><strong>Bloom Overlays:</strong> Intense light bleeding that distorts the UI and menu elements.</li>
-  <li><strong>Ambient Occlusion/Shadowing:</strong> Shader-generated shadows appearing "on top" of FMV sequences or Menu items.</li>
+  <li><strong>Depth of Field:</strong> Artificial background blur appearing on top of FMV sequences or Menu items.</li>
+  <li><strong>Ambient Occlusion/Shadowing:</strong> Shader-generated shadows appearing on top of FMV sequences or Menu items.</li>
 </ul>
 
 <h2>The Solution: Static Depth Detection</h2>
