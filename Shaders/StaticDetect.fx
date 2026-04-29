@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 //  Shader name:  Static Depth Detect
 // -----------------------------------------------------------------------------
-//  Version:      0.4a
+//  Version:      0.5a
 //  Author:       MarineSolder © 2026
 //  License:      Proprietary
 //  Source:       https://github.com/MarineSolder/Static-Depth-Detect
@@ -61,8 +61,12 @@ namespace StaticDetect
 
 // ------- CONSTANTS & TABLES -------
 
-#define MAX_WIDTH 2400
-static const float InvMaxWidth = 1.0f / (float)MAX_WIDTH;
+#define MAX_COLS 60
+#define MAX_ROWS 40
+
+static const float MaxScanPoints      = (float)(MAX_COLS * MAX_ROWS);
+static const float InvMaxCols         = 1.0f / (float)MAX_COLS;
+static const float InvMaxRows         = 1.0f / (float)MAX_ROWS;
 
 static const uint TotalPointsTable[4] = { 24, 96, 384, 2400 };
 static const uint GridColsTable[4]    = { 6, 12, 24, 60 };
@@ -80,10 +84,10 @@ uniform int Info <
     ui_category_closed = true;
     ui_label    = " ";
     ui_type     = "radio";
-    ui_text     = "Shader: Static Depth Detect v0.4a\n"
+    ui_text     = "Shader: Static Depth Detect v0.5a\n"
                   "Author: MarineSolder © 2026\n\n"
                   "In many legacy titles, the 3D scene completely freezes during Menu navigation or FMV playback.\n"
-                  "This shader tries to detect depth freeze and automatically toggles off/on scene effects (e.g. Bloom, AO, RT) to prevent interference with Menu or FMV.\n\n"
+                  "This shader tries to detect depth freeze and automatically toggles off/on scene effects (e.g. DOF, AO, RC) to prevent interference with Menu or FMV.\n\n"
                   "USAGE ORDER:\n"
                   "1. StaticDepth_Detect -> Place at the VERY TOP.\n"
                   "2. StaticDepth_Before -> Place BEFORE desired effects.\n"
@@ -123,7 +127,7 @@ uniform int ToggleMode1 <
     ui_label    = "Pair 1: Trigger Action";
     ui_type     = "combo";
     ui_items    = "Toggles OFF\0Toggles ON\0";
-    ui_tooltip  = "Choose toggle mode for pair group 1.";
+    ui_tooltip  = "Choose Trigger mode for pair group 1.";
 > = 0;
 
 #if NUM_TECH_PAIRS > 1
@@ -132,16 +136,24 @@ uniform int ToggleMode2 <
     ui_label    = "Pair 2: Trigger Action";
     ui_type     = "combo";
     ui_items    = "Toggles OFF\0Toggles ON\0";
-    ui_tooltip  = "Choose toggle mode for pair group 2.";
+    ui_tooltip  = "Choose Trigger mode for pair group 2.";
 > = 0;
 #endif
+
+uniform float FadeSpeed <
+    ui_category = "Configuration";
+    ui_label    = "Fade Speed";
+    ui_type     = "slider";
+    ui_min      = 0.1; ui_max = 1.0; ui_step = 0.1;
+    ui_tooltip  = "Speed of the fade transition for effects. 0.1 - Smooth fade, 1.0 - Instant (no fade).";
+> = 0.9;
 
 uniform int PointsGrid <
     ui_category = "Detection Area"; 
     ui_label    = "Density of Scan Points";
     ui_type     = "combo";
     ui_items    = "Low (6x4)\0Medium (12x8)\0High (24x16)\0Extreme (60x40)\0";
-    ui_tooltip  = "Different density for different gameplay situations. Low - minimal GPU usage, high - slightly more GPU usage.";
+    ui_tooltip  = "Adjusts scan point density to suit different gameplay situations.";
 > = 1;
 
 uniform int SensFrames <
@@ -149,40 +161,55 @@ uniform int SensFrames <
     ui_label    = "Number of Frames";
     ui_type     = "slider";
     ui_min      = 10; ui_max = 300; ui_step = 1;
-    ui_tooltip  = "Amount of frames the Depth Buffer must remain static to Trigger.";
+    ui_tooltip  = "Number of frames the Depth must remain static to activate Trigger.";
 > = 30;
 
 uniform int SensLevel <
-    ui_category = "Adjustment"; 
+    ui_category = "Depth Detection"; 
     ui_label    = "Sensitivity Level";
     ui_type     = "slider";
     ui_min      = 1; ui_max = 5;
-    ui_tooltip  = "Multiplier for global depth detection. Low - lazy detection, High - aggressive detection.";
+    ui_tooltip  = "Multiplier for global Depth detection. 1 - Lazy detection, 5 - Aggressive detection.";
 > = 4;
 
 uniform int DelayFrames <
-    ui_category = "Adjustment"; 
-    ui_label    = "Visual Delay (frames)";
+    ui_category = "Depth Detection"; 
+    ui_label    = "Trigger Buffer (Frames)";
     ui_type     = "slider";
     ui_min      = 0; ui_max = 100; ui_step = 1;
-    ui_tooltip  = "Additional idle frames to wait before Trigger. Use it to control flickering of the mask.";
+    ui_tooltip  = "Additional idle frames to hold the Trigger active before reset. Use this setting to control rapid toggling (flickering).";
 > = 5;
 
 uniform int ReleaseSpeed <
-    ui_category = "Adjustment"; 
-    ui_label    = "Release Decay";
+    ui_category = "Depth Detection"; 
+    ui_label    = "Trigger Release";
     ui_type     = "slider";
-    ui_min      = 1; ui_max = 10; ui_step = 1;
-    ui_tooltip  = "Decay speed of the Trigger. Lower - slower Decay speed, Higher - instant Decay speed.";
-> = 5;
+    ui_min      = 1; ui_max = 5; ui_step = 1;
+    ui_tooltip  = "Reset speed of the Trigger Buffer. 1 - Slow reset, 5 - Instant reset (1 frame).";
+> = 4;
 
-uniform float FadeSpeed <
-    ui_category = "Adjustment";
-    ui_label    = "Fade Speed";
+uniform bool ColorValidation <
+    ui_category = "Color Detection";
+    ui_label    = "Enable Color Monitoring";
+    ui_tooltip  = "This may improve detection accuracy in some games, but may cause issues in others.\n"
+                  "OFF - Uses Depth detection only, ON - Adds color change monitoring of the scene to protect Trigger stability.";
+> = false;
+
+uniform float ColorTolerance <
+    ui_category = "Color Detection"; 
+    ui_label    = "Tolerance";
     ui_type     = "slider";
-    ui_min      = 0.1; ui_max = 1.0; ui_step = 0.1;
-    ui_tooltip  = "Transition speed of the effects. 1.0 - instant (no fade), 0.1 - smooth fade.";
-> = 1.0;
+    ui_min      = 0.01; ui_max = 0.40; ui_step = 0.01;
+    ui_tooltip  = "Minimum color change required for a pixel to be considered in motion.";
+> = 0.08;
+
+uniform int RequiredPercent <
+    ui_category = "Color Detection"; 
+    ui_label    = "Required Motion (%)";
+    ui_type     = "slider";
+    ui_min      = 1; ui_max = 95; ui_step = 1;
+    ui_tooltip  = "Required percentage of moving pixels to confirm the Trigger.";
+> = 15;
 
 uniform bool ShowDebugTint < 
     ui_category = "Debug"; 
@@ -198,7 +225,7 @@ uniform bool ShowScanPoints <
 
 float FetchLinearDepth(float2 scanUV)
 {
-        float depth = tex2Dlod(ReShade::DepthBuffer, float4(scanUV, 0, 0)).x;
+    float depth = tex2Dlod(ReShade::DepthBuffer, float4(scanUV, 0.0f, 0.0f)).r;
     depth *= (float)RESHADE_DEPTH_MULTIPLIER;
 
     #if RESHADE_DEPTH_INPUT_IS_LOGARITHMIC
@@ -218,15 +245,10 @@ float FetchLinearDepth(float2 scanUV)
     return saturate(depth);
 }
 
-float2 CalcScanPointUV(const uint pointIndex, const int mode)
+float2 CalcScanPointUV(const uint col, const uint row, const int mode)
 {
     const int gridIndex = clamp(mode, 0, 3);
-    const uint gridCols = GridColsTable[gridIndex];
-
     const float2 gridIntervals = float2((float)GridColsTable[gridIndex] - 1.0f, (float)GridRowsTable[gridIndex] - 1.0f);
-
-    const uint row = pointIndex / gridCols;
-    const uint col = pointIndex % gridCols;
 
     return float2(GridMargin + ((float)col / gridIntervals.x) * GridArea, 
                   GridMargin + ((float)row / gridIntervals.y) * GridArea);
@@ -234,11 +256,11 @@ float2 CalcScanPointUV(const uint pointIndex, const int mode)
 
 // ------- TEXTURES & SAMPLERS -------
 
-texture MS_TexClean { Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = MS_FORMAT; SRGBView = false; };
+texture MS_TexClean { Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = MS_FORMAT; };
 sampler MS_SampClean { Texture = MS_TexClean; SRGBTexture = false; };
 
 #if NUM_TECH_PAIRS > 1
-texture MS_TexClean2 { Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = MS_FORMAT; SRGBView = false; };
+texture MS_TexClean2 { Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = MS_FORMAT; };
 sampler MS_SampClean2 { Texture = MS_TexClean2; SRGBTexture = false; };
 #endif
 
@@ -247,21 +269,50 @@ texture MS_TexStatePrev { Width = 1; Height = 1; Format = RGBA32F; };
 sampler MS_SampStateCurr { Texture = MS_TexStateCurr; };
 sampler MS_SampStatePrev { Texture = MS_TexStatePrev; };
 
-texture MS_TexPointsCurr { Width = MAX_WIDTH; Height = 1; Format = R32F; };
-texture MS_TexPointsPrev { Width = MAX_WIDTH; Height = 1; Format = R32F; };
+texture MS_TexPointsCurr { Width = MAX_COLS; Height = MAX_ROWS; Format = R32F; };
+texture MS_TexPointsPrev { Width = MAX_COLS; Height = MAX_ROWS; Format = R32F; };
 sampler MS_SampPointsCurr { Texture = MS_TexPointsCurr; };
 sampler MS_SampPointsPrev { Texture = MS_TexPointsPrev; };
 
+texture MS_TexColorLive { Width = MAX_COLS; Height = MAX_ROWS; Format = RGBA32F; };
+texture MS_TexColorCurr { Width = MAX_COLS; Height = MAX_ROWS; Format = RGBA32F; };
+texture MS_TexColorPrev { Width = MAX_COLS; Height = MAX_ROWS; Format = RGBA32F; };
+sampler MS_SampColorLive { Texture = MS_TexColorLive; };
+sampler MS_SampColorCurr { Texture = MS_TexColorCurr; };
+sampler MS_SampColorPrev { Texture = MS_TexColorPrev; };
+
 // ------- SHADERS -------
 
-void PS_FetchPoints(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float outPoint : SV_Target)
+void PS_FetchPoints(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float outDepth : SV_Target)
 {
-    const uint pointIndex = (uint)screenPos.x;
-    const uint totalPoints = TotalPointsTable[clamp(PointsGrid, 0, 3)];
+    const uint col = (uint)screenPos.x;
+    const uint row = (uint)screenPos.y;
+    const int gridIndex = clamp(PointsGrid, 0, 3);
 
-    if (pointIndex < totalPoints)
+    if (col < GridColsTable[gridIndex] && row < GridRowsTable[gridIndex])
     {
-        outPoint = FetchLinearDepth(CalcScanPointUV(pointIndex, PointsGrid));
+        outDepth = FetchLinearDepth(CalcScanPointUV(col, row, PointsGrid));
+    }
+    else
+    {
+        discard;
+    }
+}
+
+void PS_FetchLiveColor(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float4 outColor : SV_Target)
+{
+    if (!ColorValidation)
+    {
+        discard;
+    }
+
+    const uint col = (uint)screenPos.x;
+    const uint row = (uint)screenPos.y;
+
+    if (col < MAX_COLS && row < MAX_ROWS)
+    {
+        const float2 targetUV = CalcScanPointUV(col, row, 3);
+        outColor = float4(tex2Dlod(ReShade::BackBuffer, float4(targetUV, 0.0f, 0.0f)).rgb, 1.0f);
     }
     else
     {
@@ -271,60 +322,124 @@ void PS_FetchPoints(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, ou
 
 void PS_AnalyzePoints(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float4 outStateCurr : SV_Target)
 {
-    const float4 prevState = tex2D(MS_SampStatePrev, float2(0.5f, 0.5f));
-        const float boostMultiplier = BoostTable[clamp(SensLevel - 1, 0, 4)];
-    const uint totalPoints = TotalPointsTable[clamp(PointsGrid, 0, 3)];
+    float4 prevState = tex2D(MS_SampStatePrev, float2(0.5f, 0.5f));
 
-        static const float thresholdStatic = 0.0001f;
+    if (prevState.a < 0.5f)
+    {
+        prevState.r = 1.0f; prevState.g = (float)(SensFrames + DelayFrames); prevState.b = 1.0f; prevState.a = 1.0f; 
+    }
+
+    const float boostMultiplier = BoostTable[clamp(SensLevel - 1, 0, 4)];
+
+    const int gridIndex = clamp(PointsGrid, 0, 3);
+    const uint maxCols = GridColsTable[gridIndex];
+    const uint maxRows = GridRowsTable[gridIndex];
+
+    static const float thresholdStatic = 0.0001f;
     static const float thresholdActive = 0.0002f;
-    const bool isStatic = (prevState.w > 0.5f);
+
+    const bool isStatic = (prevState.g > 0.0f);
     const float currentThreshold = isStatic ? thresholdActive : thresholdStatic;
 
     float maxDepthDelta = 0.0f;
+    bool depthBreak = false;
 
-        [loop]
-    for (uint pointIndex = 0; pointIndex < totalPoints; pointIndex++)
+    [loop]
+    for (uint y = 0; y < maxRows; y++)
     {
-                const float2 fetchUV = float2(((float)pointIndex + 0.5f) * InvMaxWidth, 0.5f);
-
-                const float depthCurr = tex2Dlod(MS_SampPointsCurr, float4(fetchUV, 0.0f, 0.0f)).x;
-        const float depthPrev = tex2Dlod(MS_SampPointsPrev, float4(fetchUV, 0.0f, 0.0f)).x;
-        const float depthDiff = abs(depthCurr - depthPrev) * boostMultiplier;
-
-                if (depthDiff > currentThreshold)
+        [loop]
+        for (uint x = 0; x < maxCols; x++)
         {
-            maxDepthDelta = depthDiff;
+            const float2 fetchUV = float2(((float)x + 0.5f) * InvMaxCols, ((float)y + 0.5f) * InvMaxRows);
+
+            const float depthCurr = tex2Dlod(MS_SampPointsCurr, float4(fetchUV, 0.0f, 0.0f)).r;
+            const float depthPrev = tex2Dlod(MS_SampPointsPrev, float4(fetchUV, 0.0f, 0.0f)).r;
+            const float depthDiff = abs(depthCurr - depthPrev) * boostMultiplier;
+
+            if (depthDiff > currentThreshold)
+            {
+                maxDepthDelta = depthDiff;
+                depthBreak = true;
+                break;
+            }
+            maxDepthDelta = max(maxDepthDelta, depthDiff);
+        }
+        if (depthBreak)
+        {
             break;
         }
-                        maxDepthDelta = max(maxDepthDelta, depthDiff);
     }
 
     float frameCount = prevState.g;
-        const float requiredFrames = (float)(SensFrames + DelayFrames);
+    float releaseStep = 0.0f;
+    const float requiredFrames = (float)(SensFrames + DelayFrames);
 
-    if (maxDepthDelta < currentThreshold)
+    if (ReleaseSpeed == 5)
     {
-                frameCount = min(frameCount + 1.0f, requiredFrames);
+        releaseStep = requiredFrames;
     }
     else
     {
-                frameCount = max(frameCount - (float)ReleaseSpeed, 0.0f);
+        releaseStep = (float)SensFrames * (0.05f * exp2((float)ReleaseSpeed - 1.0f));
     }
-
-        float triggerState = prevState.w;
-    if (frameCount >= requiredFrames)
+    if (maxDepthDelta < currentThreshold)
     {
-        triggerState = 1.0f;
+        frameCount = min(frameCount + 1.0f, requiredFrames);
     }
-    else if (frameCount <= (float)DelayFrames) 
+    else
     {
-        triggerState = 0.0f;
+        frameCount = max(frameCount - releaseStep, 0.0f);
     }
 
-        const float fadeFactor = FadeSpeed * FadeSpeed;
-    const float currentFade = lerp(prevState.r, triggerState, fadeFactor);
+    float globalLatch = prevState.b;
 
-    outStateCurr = float4(currentFade, frameCount, maxDepthDelta, triggerState);
+    if (frameCount >= (float)SensFrames)
+    {
+        if (!ColorValidation)
+        {
+            globalLatch = 1.0f;
+        }
+        else if (globalLatch == 0.0f)
+        {
+            float changedPixels = 0.0f;
+            const float sqColorTolerance = ColorTolerance * ColorTolerance;
+
+            [loop]
+            for (uint cy = 0; cy < MAX_ROWS; cy++)
+            {
+                [loop]
+                for (uint cx = 0; cx < MAX_COLS; cx++)
+                {
+                    const float2 fetchUV = float2(((float)cx + 0.5f) * InvMaxCols, ((float)cy + 0.5f) * InvMaxRows);
+
+                    const float3 baseColor = tex2Dlod(MS_SampColorPrev, float4(fetchUV, 0.0f, 0.0f)).rgb;
+                    const float3 currColor = tex2Dlod(MS_SampColorLive, float4(fetchUV, 0.0f, 0.0f)).rgb;
+                    const float3 diffColor = currColor - baseColor;
+
+                    if (dot(diffColor, diffColor) > sqColorTolerance)
+                    {
+                        changedPixels += 1.0f;
+                    }
+                }
+            }
+
+            const float changedPercent = (changedPixels / MaxScanPoints) * 100.0f;
+
+            if (changedPercent >= (float)RequiredPercent)
+            {
+                globalLatch = 1.0f;
+            }
+        }
+    }
+    else if (frameCount <= 0.0f)
+    {
+        globalLatch = 0.0f;
+    }
+
+    const float fadeFactor = FadeSpeed * FadeSpeed;
+    const float currentFade = lerp(prevState.r, globalLatch, fadeFactor);
+
+    outStateCurr = float4(currentFade, frameCount, globalLatch, prevState.a);
 }
 
 void PS_UpdateState(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float4 outStatePrev : SV_Target)
@@ -332,19 +447,55 @@ void PS_UpdateState(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, ou
     outStatePrev = tex2D(MS_SampStateCurr, float2(0.5f, 0.5f));
 }
 
-void PS_UpdatePoints(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float outPoint : SV_Target)
+void PS_UpdatePoints(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float outDepth : SV_Target)
 {
-    const uint pointIndex = (uint)screenPos.x;
-    const uint totalPoints = TotalPointsTable[clamp(PointsGrid, 0, 3)];
+    const uint col = (uint)screenPos.x;
+    const uint row = (uint)screenPos.y;
+    const int gridIndex = clamp(PointsGrid, 0, 3);
 
-    if (pointIndex < totalPoints)
+    if (col < GridColsTable[gridIndex] && row < GridRowsTable[gridIndex])
     {
-        outPoint = tex2D(MS_SampPointsCurr, scanUV).x;
+        outDepth = tex2Dlod(MS_SampPointsCurr, float4(scanUV, 0.0f, 0.0f)).r;
     }
     else
     {
         discard;
     }
+}
+
+void PS_UpdateColorCurr(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float4 outLiveColor : SV_Target)
+{
+    if (!ColorValidation) discard;
+
+    const uint col = (uint)screenPos.x;
+    const uint row = (uint)screenPos.y;
+
+    if (col < MAX_COLS && row < MAX_ROWS)
+    {
+        const float4 currState = tex2Dlod(MS_SampStateCurr, float4(0.5f, 0.5f, 0.0f, 0.0f));
+
+        if (currState.g == 0.0f)
+        {
+            outLiveColor = tex2Dlod(MS_SampColorLive, float4(scanUV, 0.0f, 0.0f));
+        }
+        else
+        {
+            outLiveColor = tex2Dlod(MS_SampColorPrev, float4(scanUV, 0.0f, 0.0f));
+        }
+    }
+    else
+    {
+        discard;
+    }
+}
+
+void PS_UpdateColorPrev(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float4 outColorPrev : SV_Target)
+{
+    if (!ColorValidation)
+    {
+        discard;
+    }
+    outColorPrev = tex2Dlod(MS_SampColorCurr, float4(scanUV, 0.0f, 0.0f));
 }
 
 void PS_SaveBackBuffer(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float4 outColor : SV_Target)
@@ -367,7 +518,7 @@ void PS_ApplyToggle(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, ou
     const float4 cleanFrame = tex2D(MS_SampClean, scanUV);
     const float4 processFrame = tex2D(ReShade::BackBuffer, scanUV);
 
-        if (ToggleMode1 == 0)
+    if (ToggleMode1 == 0)
     {
         outColor = lerp(processFrame, cleanFrame, currentFade);
     }
@@ -376,28 +527,33 @@ void PS_ApplyToggle(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, ou
         outColor = lerp(cleanFrame, processFrame, currentFade);
     }
 
-        if (ShowDebugTint && currentFade > 0.001f)
+    if (ShowDebugTint && currentFade > 0.001f)
     {
         outColor.rgb = lerp(outColor.rgb, float3(1.0f, 0.0f, 0.0f), 0.3f * currentFade);
     }
 
-        if (ShowScanPoints)
+    if (ShowScanPoints)
     {
         const int gridIndex = clamp(PointsGrid, 0, 3);
         const float2 gridGaps = float2((float)GridColsTable[gridIndex] - 1.0f, (float)GridRowsTable[gridIndex] - 1.0f);
         const float2 screenRes = float2(BUFFER_WIDTH, BUFFER_HEIGHT);
+        const float dotSize = max(1.0f, round((float)BUFFER_HEIGHT / 720.0f));
 
-                const float dotSize = max(1.0f, round((float)BUFFER_HEIGHT / 720.0f));
-
-                float2 nearestIndex = round(((scanUV - GridMargin) / GridArea) * gridGaps);
+        float2 nearestIndex = round(((scanUV - GridMargin) / GridArea) * gridGaps);
         nearestIndex = clamp(nearestIndex, 0.0f, gridGaps);
 
-                const float2 targetUV = GridMargin + (nearestIndex / gridGaps) * GridArea;
+        const float2 targetUV = GridMargin + (nearestIndex / gridGaps) * GridArea;
+        const float2 distPixels = abs(scanUV - targetUV) * screenRes;
 
-                const float2 distPixels = abs(scanUV - targetUV) * screenRes;
         if (distPixels.x < dotSize && distPixels.y < dotSize) 
         {
-            outColor.rgb = float3(1.0f, 1.0f, 0.0f);
+            float3 dotColor = float3(1.0f, 1.0f, 0.0f);
+
+            if (ColorValidation && currState.g >= (float)SensFrames && currState.b == 0.0f)
+            {
+                dotColor = float3(0.0f, 0.5f, 1.0f);
+            }
+            outColor.rgb = dotColor;
         }
     }
 }
@@ -411,7 +567,7 @@ void PS_ApplyToggle2(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, o
     const float4 cleanFrame = tex2D(MS_SampClean2, scanUV);
     const float4 processFrame = tex2D(ReShade::BackBuffer, scanUV);
 
-        if (ToggleMode2 == 0)
+    if (ToggleMode2 == 0)
     {
         outColor = lerp(processFrame, cleanFrame, currentFade);
     }
@@ -428,10 +584,13 @@ void PS_ApplyToggle2(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, o
 
 technique StaticDepth_Detect
 {
-    pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_FetchPoints; RenderTarget = StaticDetect::MS_TexPointsCurr; }
-    pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_AnalyzePoints; RenderTarget = StaticDetect::MS_TexStateCurr; }
-    pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_UpdateState; RenderTarget = StaticDetect::MS_TexStatePrev; }
-    pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_UpdatePoints; RenderTarget = StaticDetect::MS_TexPointsPrev; }
+    pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_FetchPoints;     RenderTarget = StaticDetect::MS_TexPointsCurr; }
+    pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_FetchLiveColor;  RenderTarget = StaticDetect::MS_TexColorLive; }
+    pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_AnalyzePoints;   RenderTarget = StaticDetect::MS_TexStateCurr; }
+    pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_UpdateState;     RenderTarget = StaticDetect::MS_TexStatePrev; }
+    pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_UpdatePoints;    RenderTarget = StaticDetect::MS_TexPointsPrev; }
+    pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_UpdateColorCurr; RenderTarget = StaticDetect::MS_TexColorCurr; }
+    pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_UpdateColorPrev; RenderTarget = StaticDetect::MS_TexColorPrev; }
 }
 
 technique StaticDepth_Before
