@@ -12,7 +12,7 @@
 
 <h2>The Solution: Static Depth Detection</h2>
 <p>
-  This shader introduces depth state monitoring and color-jump detection through a lightweight scan-points system and functions as a trigger to automatically toggle desired effects off/on when 3D rendering freezes.
+  This shader introduces depth state and color-jump detection through a lightweight scan-points system and functions as a trigger to automatically toggle desired effects off/on when 3D rendering freezes.
 </p>
 
 <h2>Requirements & Limitations</h2>
