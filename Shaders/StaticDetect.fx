@@ -1,13 +1,14 @@
 // -----------------------------------------------------------------------------
 //  Shader name:  Static Depth Detect
 // -----------------------------------------------------------------------------
-//  Version:      0.5a
+//  Version:      0.5b
 //  Author:       MarineSolder © 2026
 //  License:      Proprietary
 //  Source:       https://github.com/MarineSolder/Static-Depth-Detect
 // -----------------------------------------------------------------------------
 //  Requirements & Limitations:
 //   - ReShade: 5.0 or higher
+//   - Graphics API: DirectX 9.0c, 10, 11 (Others - not yet fully tested).
 //   - Anti-Aliasing: Disable MSAA in game settings for depth detection to work.
 //   - Generic Depth: Depth Addon must be enabled in ReShade's settings.
 //   - Depth Input: The depth input must have the correct polarity
@@ -84,10 +85,10 @@ uniform int Info <
     ui_category_closed = true;
     ui_label    = " ";
     ui_type     = "radio";
-    ui_text     = "Shader: Static Depth Detect v0.5a\n"
+    ui_text     = "Shader: Static Depth Detect v0.5b\n"
                   "Author: MarineSolder © 2026\n\n"
                   "In many legacy titles, the 3D scene completely freezes during Menu navigation or FMV playback.\n"
-                  "This shader tries to detect depth freeze and automatically toggles off/on scene effects (e.g. DOF, AO, RC) to prevent interference with Menu or FMV.\n\n"
+                  "This shader detects depth freeze and automatically toggles off/on desired effects to prevent interference with Menu or FMV.\n\n"
                   "USAGE ORDER:\n"
                   "1. StaticDepth_Detect -> Place at the VERY TOP.\n"
                   "2. StaticDepth_Before -> Place BEFORE desired effects.\n"
@@ -153,7 +154,7 @@ uniform int PointsGrid <
     ui_label    = "Density of Scan Points";
     ui_type     = "combo";
     ui_items    = "Low (6x4)\0Medium (12x8)\0High (24x16)\0Extreme (60x40)\0";
-    ui_tooltip  = "Adjusts scan point density to suit different gameplay situations.";
+    ui_tooltip  = "Choose scan-point density to suit different gameplay situations.";
 > = 1;
 
 uniform int SensFrames <
@@ -168,8 +169,8 @@ uniform int SensLevel <
     ui_category = "Depth Detection"; 
     ui_label    = "Sensitivity Level";
     ui_type     = "slider";
-    ui_min      = 1; ui_max = 5;
-    ui_tooltip  = "Multiplier for global Depth detection. 1 - Lazy detection, 5 - Aggressive detection.";
+    ui_min      = 1; ui_max = 5; ui_step = 1;
+    ui_tooltip  = "Multiplier for Depth sensitivity. 1 - Lazy detection, 5 - Aggressive detection.";
 > = 4;
 
 uniform int DelayFrames <
@@ -184,31 +185,31 @@ uniform int ReleaseSpeed <
     ui_category = "Depth Detection"; 
     ui_label    = "Trigger Release";
     ui_type     = "slider";
-    ui_min      = 1; ui_max = 5; ui_step = 1;
-    ui_tooltip  = "Reset speed of the Trigger Buffer. 1 - Slow reset, 5 - Instant reset (1 frame).";
-> = 4;
+    ui_min      = 1; ui_max = 10; ui_step = 1;
+    ui_tooltip  = "Reset speed of the Trigger Buffer. 1 - Slow reset, 10 - Instant reset.";
+> = 8;
 
 uniform bool ColorValidation <
     ui_category = "Color Detection";
-    ui_label    = "Enable Color Monitoring";
-    ui_tooltip  = "This may improve detection accuracy in some games, but may cause issues in others.\n"
+    ui_label    = "Enable Color-Jump Detection";
+    ui_tooltip  = "This may improve or break global detection accuracy, depending on the game.\n"
                   "OFF - Uses Depth detection only, ON - Adds color change monitoring of the scene to protect Trigger stability.";
 > = false;
 
-uniform float ColorTolerance <
+uniform int ColorTolerance <
     ui_category = "Color Detection"; 
-    ui_label    = "Tolerance";
+    ui_label    = "Tolerance (%)";
     ui_type     = "slider";
-    ui_min      = 0.01; ui_max = 0.40; ui_step = 0.01;
-    ui_tooltip  = "Minimum color change required for a pixel to be considered in motion.";
-> = 0.08;
+    ui_min      = 1; ui_max = 40; ui_step = 1;
+    ui_tooltip  = "Minimum color difference required for a pixel to be considered as \"changed\".";
+> = 8;
 
 uniform int RequiredPercent <
     ui_category = "Color Detection"; 
-    ui_label    = "Required Motion (%)";
+    ui_label    = "Required Change (%)";
     ui_type     = "slider";
-    ui_min      = 1; ui_max = 95; ui_step = 1;
-    ui_tooltip  = "Required percentage of moving pixels to confirm the Trigger.";
+    ui_min      = 1; ui_max = 90; ui_step = 1;
+    ui_tooltip  = "Required percentage of changed pixels to confirm the \"color-jump\".";
 > = 15;
 
 uniform bool ShowDebugTint < 
@@ -248,10 +249,51 @@ float FetchLinearDepth(float2 scanUV)
 float2 CalcScanPointUV(const uint col, const uint row, const int mode)
 {
     const int gridIndex = clamp(mode, 0, 3);
-    const float2 gridIntervals = float2((float)GridColsTable[gridIndex] - 1.0f, (float)GridRowsTable[gridIndex] - 1.0f);
+    const float2 gridIntervals = float2((float)GridColsTable[gridIndex] - 1.0f, 
+                                        (float)GridRowsTable[gridIndex] - 1.0f);
 
     return float2(GridMargin + ((float)col / gridIntervals.x) * GridArea, 
                   GridMargin + ((float)row / gridIntervals.y) * GridArea);
+}
+
+void ShowDebugLayer(inout float3 color, float2 scanUV, float4 currState)
+{
+    if (!ShowDebugTint && !ShowScanPoints)
+    {
+        return;
+    }
+
+    const float currentFade = currState.r;
+
+    if (ShowDebugTint && currentFade > 0.001f)
+    {
+        color = lerp(color, float3(1.0f, 0.0f, 0.0f), 0.3f * currentFade);
+    }
+
+    if (ShowScanPoints)
+    {
+        const int gridIndex = clamp(PointsGrid, 0, 3);
+        const float2 gridGaps = float2((float)GridColsTable[gridIndex] - 1.0f, (float)GridRowsTable[gridIndex] - 1.0f);
+        const float2 screenRes = float2(BUFFER_WIDTH, BUFFER_HEIGHT);
+        const float dotSize = max(1.0f, round((float)BUFFER_HEIGHT / 720.0f));
+
+        float2 nearestIndex = round(((scanUV - GridMargin) / GridArea) * gridGaps);
+        nearestIndex = clamp(nearestIndex, 0.0f, gridGaps);
+
+        const float2 targetUV = GridMargin + (nearestIndex / gridGaps) * GridArea;
+        const float2 distPixels = abs(scanUV - targetUV) * screenRes;
+
+        if (distPixels.x < dotSize && distPixels.y < dotSize) 
+        {
+            float3 dotColor = float3(1.0f, 1.0f, 0.0f);
+
+            if (ColorValidation && currState.g >= (float)SensFrames && currState.b == 0.0f)
+            {
+                dotColor = float3(0.0f, 0.5f, 1.0f);
+            }
+            color = dotColor;
+        }
+    }
 }
 
 // ------- TEXTURES & SAMPLERS -------
@@ -371,17 +413,11 @@ void PS_AnalyzePoints(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, 
     }
 
     float frameCount = prevState.g;
-    float releaseStep = 0.0f;
     const float requiredFrames = (float)(SensFrames + DelayFrames);
 
-    if (ReleaseSpeed == 5)
-    {
-        releaseStep = requiredFrames;
-    }
-    else
-    {
-        releaseStep = (float)SensFrames * (0.05f * exp2((float)ReleaseSpeed - 1.0f));
-    }
+    float timeFactor = (0.0142f * (float)ReleaseSpeed) + 42.0f * pow(0.32f, 11.0f - (float)ReleaseSpeed);
+    float releaseStep = requiredFrames * timeFactor;
+
     if (maxDepthDelta < currentThreshold)
     {
         frameCount = min(frameCount + 1.0f, requiredFrames);
@@ -402,7 +438,7 @@ void PS_AnalyzePoints(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, 
         else if (globalLatch == 0.0f)
         {
             float changedPixels = 0.0f;
-            const float sqColorTolerance = ColorTolerance * ColorTolerance;
+            const float sqColorTolerance = (ColorTolerance / 100.0f) * (ColorTolerance / 100.0f);
 
             [loop]
             for (uint cy = 0; cy < MAX_ROWS; cy++)
@@ -527,35 +563,7 @@ void PS_ApplyToggle(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, ou
         outColor = lerp(cleanFrame, processFrame, currentFade);
     }
 
-    if (ShowDebugTint && currentFade > 0.001f)
-    {
-        outColor.rgb = lerp(outColor.rgb, float3(1.0f, 0.0f, 0.0f), 0.3f * currentFade);
-    }
-
-    if (ShowScanPoints)
-    {
-        const int gridIndex = clamp(PointsGrid, 0, 3);
-        const float2 gridGaps = float2((float)GridColsTable[gridIndex] - 1.0f, (float)GridRowsTable[gridIndex] - 1.0f);
-        const float2 screenRes = float2(BUFFER_WIDTH, BUFFER_HEIGHT);
-        const float dotSize = max(1.0f, round((float)BUFFER_HEIGHT / 720.0f));
-
-        float2 nearestIndex = round(((scanUV - GridMargin) / GridArea) * gridGaps);
-        nearestIndex = clamp(nearestIndex, 0.0f, gridGaps);
-
-        const float2 targetUV = GridMargin + (nearestIndex / gridGaps) * GridArea;
-        const float2 distPixels = abs(scanUV - targetUV) * screenRes;
-
-        if (distPixels.x < dotSize && distPixels.y < dotSize) 
-        {
-            float3 dotColor = float3(1.0f, 1.0f, 0.0f);
-
-            if (ColorValidation && currState.g >= (float)SensFrames && currState.b == 0.0f)
-            {
-                dotColor = float3(0.0f, 0.5f, 1.0f);
-            }
-            outColor.rgb = dotColor;
-        }
-    }
+    ShowDebugLayer(outColor.rgb, scanUV, currState);
 }
 
 #if NUM_TECH_PAIRS > 1
