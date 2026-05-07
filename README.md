@@ -1,6 +1,6 @@
 <h1>Static Depth Detect</h1>
 <p>
-  <strong>Version:</strong> 0.6a<br>
+  <strong>Version:</strong> 0.6c<br>
   <strong>Author:</strong> MarineSolder © 2026<br>
   <strong>License:</strong> Proprietary<br>
 </p>
