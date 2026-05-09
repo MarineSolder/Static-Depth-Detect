@@ -1,8 +1,8 @@
 <h1>Static Depth Detect</h1>
 <p>
-  <strong>Version:</strong> 0.6c<br>
-  <strong>Author:</strong> MarineSolder © 2026<br>
-  <strong>License:</strong> Proprietary<br>
+  <strong>Version:</strong> 0.7a<br>
+  <strong>Author:</strong> MarineSolder<br>
+  <strong>License:</strong> <a href="./LICENSE">Custom Non-Commercial License</a><br>
 </p>
 <hr>
 <h2>The Problem</h2>
@@ -22,4 +22,9 @@
   <li><strong>Anti-Aliasing:</strong> Disable MSAA in game settings for depth detection to work.</li>
   <li><strong>Generic Depth:</strong> Depth Addon must be enabled in ReShade's settings.</li>
   <li><strong>Depth Input:</strong> The depth input must have the correct polarity (RESHADE_DEPTH_INPUT_IS_REVERSED) to track depth state changes properly.</li>
-  
+</ul>  
+
+<p align="center">
+    © 2026 MarineSolder • <strong>Discord:</strong> <code>marinesolder</code> • 
+    <a href="https://github.com/MarineSolder/Static-Depth-Detect/issues">Report a bug</a>
+</p>
