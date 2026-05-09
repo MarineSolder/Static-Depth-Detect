@@ -24,6 +24,7 @@
   <li><strong>Depth Input:</strong> The depth input must have the correct polarity (RESHADE_DEPTH_INPUT_IS_REVERSED) to track depth state changes properly.</li>
 </ul>  
 
+<br>
 <p align="center">
     © 2026 MarineSolder • <strong>Discord:</strong> <code>marinesolder</code> • 
     <a href="https://github.com/MarineSolder/Static-Depth-Detect/issues">Report a bug</a>
