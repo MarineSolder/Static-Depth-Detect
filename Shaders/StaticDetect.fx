@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------------
 //  Shader name:  Static Depth Detect
 // ---------------------------------------------------------------------------------
-//  Version:      0.7a
+//  Version:      0.7b
 //  Author:       MarineSolder © 2026
 //  License:      Custom Non-Commercial License
 //  Source:       https://github.com/MarineSolder/Static-Depth-Detect
@@ -70,17 +70,28 @@ namespace StaticDetect
 
 // ======== CONSTANTS & TABLES ========
 
+#define STARTUP_FRAMES 5
+
 #if (BUFFER_WIDTH * 1 > BUFFER_HEIGHT * 2)
     #define MAX_COLS 80
     #define MAX_ROWS 40
+    #define SECTOR_COLS 8
+    #define SECTOR_ROWS 4
+    #define SECTOR_REQUIRED 16
     static const uint GridColsTable[4] = { 8, 16, 32, 80 };
     static const uint GridRowsTable[4] = { 4,  8, 16, 40 };
 #else
     #define MAX_COLS 60
     #define MAX_ROWS 40
+    #define SECTOR_COLS 6
+    #define SECTOR_ROWS 4
+    #define SECTOR_REQUIRED 12
     static const uint GridColsTable[4] = { 6, 12, 24, 60 };
     static const uint GridRowsTable[4] = { 4,  8, 16, 40 };
 #endif
+
+#define SPATIAL_SECTOR_PIXELS 100.0f
+#define SPATIAL_LOCAL_THRESHOLD 50.0f
 
 static const float MaxScanPoints       = (float)(MAX_COLS * MAX_ROWS);
 static const float InvMaxCols          = 1.0f / (float)MAX_COLS;
@@ -90,12 +101,12 @@ static const float GridMargin          = 0.05f;
 static const float GridArea            = 0.90f;
 
 static const float SensBoostTable[5]   = { 1.0f, 10.0f, 100.0f, 1000.0f, 10000.0f };
-static const float LowerThreshold      = 0.001f;
+static const float LowerThreshold      = 0.0005f;
 static const float UpperThreshold      = 0.5f;
 
 static const float ColorSmoothAlpha    = 0.4f;
 static const float DepthSmoothAlpha    = 0.5f;
-static const int ColorWakeupOffset     = 3;
+static const float ColorWakeupOffsetMs = 100.0f;
 static const float SnapshotCooldownMs  = 200.0f;
 
 uniform float FrameTime < source = "frametime"; >;
@@ -112,7 +123,7 @@ uniform int Info <
     ui_category_closed = true;
     ui_label    = " ";
     ui_type     = "radio";
-    ui_text     = "Shader: Static Depth Detect v0.7a\n"
+    ui_text     = "Shader: Static Depth Detect v0.7b\n"
                   "Author: MarineSolder © 2026\n\n"
                   "In many legacy titles, the 3D scene completely freezes during Menu navigation or FMV playback.\n"
                   "This shader detects depth freeze and automatically toggles off/on desired effects to prevent interference with Menu or FMV.\n\n"
@@ -177,7 +188,7 @@ uniform float FadeSpeed <
 > = 0.9;
 
 uniform int PointsGrid <
-    ui_category = "Detection Area"; 
+    ui_category = "Depth Detection";
     ui_label    = "Density of Scan Points";
     ui_type     = "combo";
     ui_items    = 
@@ -186,46 +197,51 @@ uniform int PointsGrid <
                   #else
                     "Low (6x4)\0Medium (12x8)\0High (24x16)\0Extreme (60x40)\0";
                   #endif
-    ui_tooltip  = "Choose scan-point density to suit different gameplay situations.";
+    ui_tooltip  = "Scan Points act as depth sensors distributed across the screen.\n"
+                  "Extreme - recommended only for games with a small amount of 3D objects on screen.";
 > = 1;
 
-uniform int TriggerBuffer <
-    ui_category = "Detection Area"; 
-    ui_label    = "Trigger Buffer (ms)";
-    ui_type     = "slider";
-    ui_min      = 100; ui_max = 2000; ui_step = 50;
-    ui_tooltip  = "How long the Depth must remain static to activate Trigger.";
-> = 350;
-
 uniform int SensLevel <
-    ui_category = "Depth Detection"; 
+    ui_category = "Depth Detection";
     ui_label    = "Sensitivity Level";
     ui_type     = "slider";
     ui_min      = 1; ui_max = 5; ui_step = 1;
     ui_tooltip  = "Multiplier for Depth sensitivity. 1 - Lazy detection, 5 - Aggressive detection.";
-> = 3;
+> = 4;
+
+uniform int TriggerBuffer <
+    ui_category = "Depth Detection";
+    ui_label    = "Trigger Buffer (ms)";
+    ui_type     = "slider";
+    ui_min      = 100; ui_max = 2000; ui_step = 50;
+    ui_tooltip  = "How long the Depth must remain static to activate Trigger.\n"
+                  "This is the main timing parameter of the Trigger.";
+> = 350;
 
 uniform int DelayBuffer <
-    ui_category = "Depth Detection"; 
+    ui_category = "Depth Detection";
     ui_label    = "Delay Buffer (ms)";
     ui_type     = "slider";
     ui_min      = 0; ui_max = 500; ui_step = 50;
-    ui_tooltip  = "How long to hold the Trigger active before reset. Use this setting to control rapid toggling (flickering).";
+    ui_tooltip  = "How long to hold the Trigger active before reset.\n"
+                  "Use it to add delay to Trigger decision if Depth is unstable.";
 > = 100;
 
 uniform int ReleaseSpeed <
-    ui_category = "Depth Detection"; 
+    ui_category = "Depth Detection";
     ui_label    = "Trigger Release";
     ui_type     = "slider";
     ui_min      = 1; ui_max = 10; ui_step = 1;
-    ui_tooltip  = "Reset speed of the Trigger Buffer. 1 - Slow reset, 10 - Instant reset.";
+    ui_tooltip  = "Reset speed of the Trigger Buffer. 1 - Slow reset, 10 - Instant reset.\n"
+                  "Use this setting to control rapid toggling (flickering).";
 > = 9;
 
 uniform bool ColorDetection <
     ui_category = "Color Detection";
     ui_label    = "Enable Color-Jump Detection";
     ui_tooltip  = "This may improve or break global detection accuracy, depending on the game.\n"
-                  "OFF - Uses Depth detection only, ON - Adds color change monitoring of the scene to protect Trigger stability.";
+                  "OFF - Uses Depth detection only.\n"
+                  "ON  - Adds color change monitoring of the scene to help Trigger with decision.";
 > = false;
 
 uniform int ColorTolerance <
@@ -246,7 +262,7 @@ uniform int RequiredPercent <
 
 uniform bool ShowDebugTint < 
     ui_category = "Debug"; 
-    ui_label    = "Show Trigger Overlay (Red Tint)"; 
+    ui_label    = "Show Trigger Signal (Red Overlay)"; 
 > = true;
 
 uniform bool ShowScanPoints < 
@@ -279,6 +295,11 @@ texture MS_TexStateCurr2 { Width = 1; Height = 1; Format = RGBA32F; };
 texture MS_TexStatePrev2 { Width = 1; Height = 1; Format = RGBA32F; };
 sampler MS_SampStateCurr2 { Texture = MS_TexStateCurr2; };
 sampler MS_SampStatePrev2 { Texture = MS_TexStatePrev2; };
+
+#if DEVELOPER_MODE == 1
+texture MS_TexStateCurr3 { Width = 1; Height = 1; Format = RGBA16F; };
+sampler MS_SampStateCurr3 { Texture = MS_TexStateCurr3; };
+#endif
 
 texture MS_TexDepthCurr { Width = MAX_COLS; Height = MAX_ROWS; Format = R32F; };
 texture MS_TexDepthPrev { Width = MAX_COLS; Height = MAX_ROWS; Format = R32F; };
@@ -331,30 +352,55 @@ float2 CalcScanPointUV(const uint col, const uint row, const int mode)
                   GridMargin + ((float)row / gridGaps.y) * GridArea);
 }
 
-float GetColorJumpPercent()
+float2 GetColorJumpPercent()
 {
     float changedPixels = 0.0f;
+    float detectedSectors = 0.0f;
+
     const float sqColorTolerance = (ColorTolerance / 100.0f) * (ColorTolerance / 100.0f);
+    const float minPixelsPerSector = SPATIAL_SECTOR_PIXELS * (SPATIAL_LOCAL_THRESHOLD / 100.0f);
+
+    const uint rowsPerSector = MAX_ROWS / SECTOR_ROWS;
+    const uint colsPerSector = MAX_COLS / SECTOR_COLS;
 
     [loop]
-    for (uint cy = 0; cy < MAX_ROWS; cy++)
+    for (uint sy = 0; sy < SECTOR_ROWS; sy++)
     {
         [loop]
-        for (uint cx = 0; cx < MAX_COLS; cx++)
+        for (uint sx = 0; sx < SECTOR_COLS; sx++)
         {
-            const float2 pointUV = float2(((float)cx + 0.5f) * InvMaxCols, ((float)cy + 0.5f) * InvMaxRows);
+            float currentSectorCount = 0.0f;
 
-            const float3 baseColor = tex2Dlod(MS_SampColorSnap, float4(pointUV, 0.0f, 0.0f)).rgb;
-            const float3 currColor = tex2Dlod(MS_SampColorLive, float4(pointUV, 0.0f, 0.0f)).rgb;
-            const float3 diffColor = currColor - baseColor;
-
-            if (dot(diffColor, diffColor) > sqColorTolerance)
+            [loop]
+            for (uint py = 0; py < rowsPerSector; py++)
             {
-                changedPixels += 1.0f;
+                const uint cy = (sy * rowsPerSector) + py;
+
+                [loop]
+                for (uint px = 0; px < colsPerSector; px++)
+                {
+                    const uint cx = (sx * colsPerSector) + px;
+                    const float2 pointUV = float2(((float)cx + 0.5f) * InvMaxCols, ((float)cy + 0.5f) * InvMaxRows);
+
+                    const float3 baseColor = tex2Dlod(MS_SampColorSnap, float4(pointUV, 0.0f, 0.0f)).rgb;
+                    const float3 currColor = tex2Dlod(MS_SampColorLive, float4(pointUV, 0.0f, 0.0f)).rgb;
+                    const float3 diffColor = currColor - baseColor;
+
+                    if (dot(diffColor, diffColor) > sqColorTolerance)
+                    {
+                        changedPixels += 1.0f;
+                        currentSectorCount += 1.0f;
+                    }
+                }
+            }
+
+            if (currentSectorCount >= minPixelsPerSector)
+            {
+                detectedSectors += 1.0f;
             }
         }
     }
-    return (changedPixels / MaxScanPoints) * 100.0f;
+    return float2((changedPixels / MaxScanPoints) * 100.0f, detectedSectors);
 }
 
 // ======== DEBUG & DIAGNOSTICS ========
@@ -397,15 +443,20 @@ void ShowDebugLayer(inout float3 color, float2 scanUV, float4 currState)
             float4 debugData = tex2Dlod(MS_SampStateCurr2, float4(0.5f, 0.5f, 0.0f, 0.0f));
             float smoothedDelta     = debugData.r;
             float releaseStepMs     = debugData.g;
-            float colorAnchor       = debugData.b;
-            float smoothedPercent   = debugData.a;
+
+            float4 debugFlags = tex2Dlod(MS_SampStateCurr3, float4(0.5f, 0.5f, 0.0f, 0.0f));
+            float depthTrigger      = debugFlags.r;
+            float colorTrigger      = debugFlags.g;
+            float colorAnchor       = debugFlags.b;
+            float detectedSectors   = debugFlags.a;
+
             float detectedTime      = currState.g;
             float globalTrigger     = currState.b;
+            float smoothedPercent   = currState.a;
+
             const float triggerTime = (float)TriggerBuffer;
             const float delayTime   = (float)DelayBuffer;
             const float requiredTime = triggerTime + delayTime;
-            float depthTrigger      = (detectedTime >= triggerTime) ? 1.0f : 0.0f;
-            float colorTrigger      = (smoothedPercent >= (float)RequiredPercent) ? 1.0f : 0.0f;
             float currentFPS        = 1000.0f / max(0.1f, FrameTime);
 
             const float fontHeader  = 24.0f;
@@ -415,8 +466,7 @@ void ShowDebugLayer(inout float3 color, float2 scanUV, float4 currState)
             const float col2Offset  = 155.0f;
             const float col3Offset  = 145.0f;
             const float groupIndent = fontTable + 5.0f;
-
-            float2 tablePos = float2(20.0f, 20.0f);
+            float2 tablePos         = float2(20.0f, 20.0f);
 
             int txt_DEBUG[5] = { __D, __E, __B, __U, __G };
             DrawText_String(tablePos, fontHeader, 1, scanUV, txt_DEBUG, 5, tOut);
@@ -485,7 +535,7 @@ void ShowDebugLayer(inout float3 color, float2 scanUV, float4 currState)
 
             int txt_DetectTime[13] = { __d, __e, __t, __e, __c, __t, __e, __d, __T, __i, __m, __e, __Equals };
             DrawText_String(col2, fontTable, 1, scanUV, txt_DetectTime, 13, tOut);
-            DrawText_Digit(col2 + float2(col2Offset, 0.0f), fontTable, 1, scanUV, -1, detectedTime, tOut);
+            DrawText_Digit(col2 + float2(col2Offset, 0.0f), fontTable, 1, scanUV, -1, round(detectedTime), tOut);
             col2.y += fontTable;
 
             int txt_ReqTime[13] = { __r, __e, __q, __u, __i, __r, __e, __d, __T, __i, __m, __e, __Equals };
@@ -523,6 +573,11 @@ void ShowDebugLayer(inout float3 color, float2 scanUV, float4 currState)
                 int txt_SmoothPct[16] = { __s, __m, __o, __o, __t, __h, __e, __d, __P, __e, __r, __c, __e, __n, __t, __Equals };
                 DrawText_String(col2, fontTable, 1, scanUV, txt_SmoothPct, 16, tOut);
                 DrawText_Digit(col2 + float2(col2Offset, 0.0f), fontTable, 1, scanUV, 1, smoothedPercent, tOut);
+                col2.y += fontTable;
+
+                int txt_DetectSect[16] = { __d, __e, __t, __e, __c, __t, __e, __d, __S, __e, __c, __t, __o, __r, __s, __Equals };
+                DrawText_String(col2, fontTable, 1, scanUV, txt_DetectSect, 16, tOut);
+                DrawText_Digit(col2 + float2(col2Offset, 0.0f), fontTable, 1, scanUV, -1, detectedSectors, tOut);
             }
 
             int txt_Renderer[4] = { __A, __P, __I, __Equals }; 
@@ -552,7 +607,7 @@ void ShowDebugLayer(inout float3 color, float2 scanUV, float4 currState)
 
             int txt_FPS[4] = { __F, __P, __S, __Equals };
             DrawText_String(col3, fontTable, 1, scanUV, txt_FPS, 4, tOut);
-            DrawText_Digit(col3 + float2(col3Offset, 0.0f), fontTable, 1, scanUV, -1, currentFPS, tOut);
+            DrawText_Digit(col3 + float2(col3Offset, 0.0f), fontTable, 1, scanUV, -1, round(currentFPS), tOut);
             col3.y += fontTable;
 
             int txt_RenderWidth[12] = { __R, __e, __n, __d, __e, __r, __W, __i, __d, __t, __h, __Equals };
@@ -577,7 +632,6 @@ void ShowDebugLayer(inout float3 color, float2 scanUV, float4 currState)
         const float borderSize  = 2.0f;
 
         const float2 pixelCoord = scanUV * BUFFER_SCREEN_SIZE;
-
         const float2 depthThumbPos = BUFFER_SCREEN_SIZE - float2((thumbWidth * 3.0f + thumbGap * 2.0f) + thumbMargin, thumbHeight + thumbMargin);
         const float2 colorSnapThumbPos = depthThumbPos + float2(thumbWidth + thumbGap, 0.0f);
         const float2 colorDeltaThumbPos = colorSnapThumbPos + float2(thumbWidth + thumbGap, 0.0f);
@@ -709,7 +763,12 @@ void PS_FetchLiveColor(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD,
     outColor = float4(rgb, 1.0f);
 }
 
-void PS_AnalyzeCache(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float4 outStateCurr : SV_Target0, out float4 outState2Curr : SV_Target1)
+void PS_AnalyzeCache(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float4 outStateCurr  : SV_Target0, 
+                                                                               out float4 outState2Curr : SV_Target1
+#if DEVELOPER_MODE == 1
+                                                                             , out float4 outState3Curr : SV_Target2
+#endif
+                    )
 {
     float4 prevState = tex2Dlod(MS_SampStatePrev, float4(0.5f, 0.5f, 0.0f, 0.0f));
 
@@ -718,10 +777,13 @@ void PS_AnalyzeCache(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, o
     const float requiredTime = triggerTime + delayTime;
 
     [branch]
-    if (FrameCount < 5)
+    if (FrameCount < STARTUP_FRAMES)
     {
         outStateCurr = float4(1.0f, requiredTime, 1.0f, 0.0f);
         outState2Curr = float4(0.0f, 0.0f, 0.0f, 0.0f);
+#if DEVELOPER_MODE == 1
+        outState3Curr = float4(1.0f, 0.0f, 0.0f, 0.0f);
+#endif
         return;
     }
 
@@ -767,20 +829,26 @@ void PS_AnalyzeCache(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, o
     const float prevSmoothedDelta = tex2Dlod(MS_SampStatePrev2, float4(0.5f, 0.5f, 0.0f, 0.0f)).r;
     const float smoothedDelta = (maxDepthDelta < prevSmoothedDelta) ? maxDepthDelta : lerp(prevSmoothedDelta, maxDepthDelta, DepthSmoothAlpha);
 
-    const float colorWakeupTime = max(0.0f, triggerTime - (ColorWakeupOffset * 33.33f));
+    const float colorWakeupTime = max(0.0f, triggerTime - ColorWakeupOffsetMs);
+
+    float detectedSectors = 0.0f;
 
 #if DEVELOPER_MODE == 1
     [branch]
     if (ColorDetection) 
     {
-        changedPercent = GetColorJumpPercent();
+        const float2 colorResult = GetColorJumpPercent();
+        changedPercent = colorResult.x;
+        detectedSectors = colorResult.y;
         smoothedPercent = lerp(smoothedPercent, changedPercent, ColorSmoothAlpha);
     }
 #else
     [branch]
     if (ColorDetection && (globalTrigger == 1.0f || detectedTime >= colorWakeupTime))
     {
-        changedPercent = GetColorJumpPercent();
+        const float2 colorResult = GetColorJumpPercent();
+        changedPercent = colorResult.x;
+        detectedSectors = colorResult.y;
         smoothedPercent = lerp(smoothedPercent, changedPercent, ColorSmoothAlpha);
     }
 #endif
@@ -814,7 +882,7 @@ void PS_AnalyzeCache(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, o
     }
 
     const float depthTrigger = (detectedTime >= triggerTime) ? 1.0f : 0.0f;
-    const float colorTrigger = (smoothedPercent >= (float)RequiredPercent) ? 1.0f : 0.0f;
+    const float colorTrigger = (smoothedPercent >= (float)RequiredPercent && detectedSectors >= (float)SECTOR_REQUIRED) ? 1.0f : 0.0f;
 
     [branch]
     if (depthTrigger == 1.0f)
@@ -840,10 +908,10 @@ void PS_AnalyzeCache(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, o
     const float currentFade = lerp(prevState.r, globalTrigger, fadeFactor);
 
     outStateCurr = float4(currentFade, detectedTime, globalTrigger, smoothedPercent);
+    outState2Curr = float4(smoothedDelta, releaseStepMs, 0.0f, 0.0f);
+
 #if DEVELOPER_MODE == 1
-    outState2Curr = float4(smoothedDelta, releaseStepMs, (float)colorAnchor, smoothedPercent);
-#else
-    outState2Curr = float4(smoothedDelta, 0.0f, 0.0f, 0.0f);
+    outState3Curr = float4(depthTrigger, colorTrigger, (float)colorAnchor, detectedSectors);
 #endif
 }
 
@@ -852,9 +920,9 @@ void PS_UpdateState(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, ou
     outStatePrev = tex2Dlod(MS_SampStateCurr, float4(0.5f, 0.5f, 0.0f, 0.0f));
 }
 
-void PS_UpdateState2(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float4 outState2Prev : SV_Target)
+void PS_UpdateState2(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float4 outStatePrev2 : SV_Target)
 {
-    outState2Prev = tex2Dlod(MS_SampStateCurr2, float4(0.5f, 0.5f, 0.0f, 0.0f));
+    outStatePrev2 = tex2Dlod(MS_SampStateCurr2, float4(0.5f, 0.5f, 0.0f, 0.0f));
 }
 
 void PS_UpdateDepth(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD, out float outDepth : SV_Target)
@@ -885,7 +953,7 @@ void PS_UpdateColorCurr(float4 screenPos : SV_Position, float2 scanUV : TEXCOORD
     const float4 currState = tex2Dlod(MS_SampStateCurr, float4(0.5f, 0.5f, 0.0f, 0.0f));
 
     [branch]
-    if (FrameCount < 5)
+    if (FrameCount < STARTUP_FRAMES)
     {
         outLiveColor = 1.0f;
     }
@@ -967,7 +1035,11 @@ technique StaticDepth_Detect <
     pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_FetchDepth;      RenderTarget  = StaticDetect::MS_TexDepthCurr; }
     pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_FetchLiveColor;  RenderTarget  = StaticDetect::MS_TexColorLive; }
     pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_AnalyzeCache;    RenderTarget0 = StaticDetect::MS_TexStateCurr;
-                                                                                         RenderTarget1 = StaticDetect::MS_TexStateCurr2; }
+                                                                                         RenderTarget1 = StaticDetect::MS_TexStateCurr2;
+#if DEVELOPER_MODE == 1
+                                                                                         RenderTarget2 = StaticDetect::MS_TexStateCurr3;
+#endif
+         }
     pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_UpdateState;     RenderTarget  = StaticDetect::MS_TexStatePrev; }
     pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_UpdateState2;    RenderTarget  = StaticDetect::MS_TexStatePrev2; }
     pass { VertexShader = PostProcessVS; PixelShader = StaticDetect::PS_UpdateDepth;     RenderTarget  = StaticDetect::MS_TexDepthPrev; }
