@@ -6,6 +6,14 @@
 //  License:      Custom Non-Commercial License
 //  Source:       https://github.com/MarineSolder/Static-Depth-Detect
 // ----------------------------------------------------------------------------------------------
+//  Requirements & Limitations:
+//    - ReShade: 6.0 or higher
+//    - Graphics API: DirectX 9.0c, 10, 11 (Others - not yet fully tested).
+//    - Anti-Aliasing: Disable MSAA in game settings for depth detection to work.
+//    - Generic Depth: Depth Addon must be enabled in ReShade's settings.
+//    - Depth Input: The depth input must have the correct polarity
+//     (RESHADE_DEPTH_INPUT_IS_REVERSED) to track depth state changes properly.
+// ----------------------------------------------------------------------------------------------
 //  Known Issues:
 //    - Unprocessed frames can leak for tens of milliseconds during rapid 'Menu -> Game'
 //      transitions due to Trigger decision latency.
