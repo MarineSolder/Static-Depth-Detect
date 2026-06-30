@@ -18,7 +18,7 @@
 <h2>Requirements & Limitations</h2>
 <ul>
   <li><strong>ReShade:</strong> 6.0 or higher.</li>
-  <li><strong>Graphics API:</strong> DirectX 9.0c, 10, 11 (DirectX 12, Vulkan, OpenGL - <ins>not yet fully tested</ins>).</li>
+  <li><strong>Graphics API:</strong> DirectX 9.0c, 10, 11 (DirectX 12, Vulkan, OpenGL 4.x - <ins>not yet fully tested</ins>).</li>
   <li><strong>Anti-Aliasing:</strong> Disable MSAA in game settings for depth detection to work.</li>
   <li><strong>Generic Depth:</strong> Depth Addon must be enabled in ReShade's settings.</li>
   <li><strong>Depth Input:</strong> The depth input must have the correct polarity (RESHADE_DEPTH_INPUT_IS_REVERSED) to track depth state changes properly.</li>
