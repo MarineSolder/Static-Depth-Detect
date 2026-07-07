@@ -1,6 +1,6 @@
 <h1>Static Depth Detect</h1>
 <p>
-  <a href="https://github.com/MarineSolder/Static-Depth-Detect/releases/latest" align="right">
+  <a href="https://github.com/MarineSolder/Static-Depth-Detect/archive/refs/heads/main.zip" align="right">
     <img src="https://img.shields.io/badge/Download-green?style=for-the-badge&logo=github" alt="Download" align="right">
   </a>
   <strong>Version:</strong> 0.8a<br>
