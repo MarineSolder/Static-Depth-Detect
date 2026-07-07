@@ -1,13 +1,15 @@
 <h1>Static Depth Detect</h1>
 <p>
-  <a href="https://github.com/MarineSolder/Static-Depth-Detect/archive/refs/heads/main.zip" align="right">
-    <img src="https://img.shields.io/badge/Download-green?style=for-the-badge&logo=github" alt="Download" align="right">
-  </a>
   <strong>Version:</strong> 0.8a<br>
   <strong>Author:</strong> MarineSolder<br>
   <strong>License:</strong> <a href="./LICENSE">Custom Non-Commercial License</a>
+
+  <a href="https://github.com/MarineSolder/Static-Depth-Detect/archive/refs/heads/main.zip" align="right">
+    <img src="https://img.shields.io/badge/Download-green?style=for-the-badge&logo=github" alt="Download" align="right">
+  </a>
 </p>
 <hr>
+
 <h2>The Problem</h2>
 <p>
   In many legacy titles, the 3D scene completely freezes during Menu navigation or FMV (video) playback. Advanced <b>ReShade</b> depth-based shaders (like Depth of Field, Ambient Occlusion or Ray Casting) can't detect these transitions because they are not designed for such a task. This leads to significant visual artifacts, such as image blur or shader-generated shadows appearing on top of FMV or Menu.
