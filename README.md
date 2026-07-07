@@ -25,8 +25,8 @@
   <li><strong>ReShade:</strong> 6.0 or higher.</li>
   <li><strong>Graphics API:</strong>
   <ul>
-    <li>DirectX 9.0c, 10, 11 − full support.</li>
-    <li>DirectX 12, Vulkan, OpenGL 4.x − <ins>depends on game's depth buffer support</ins>.</li>
+    <li>DirectX 9.0c, 10, 11 − <ins>full support</ins>.</li>
+    <li>DirectX 12, Vulkan, OpenGL 4.x − <ins>depends on ReShade's depth buffer support</ins>.</li>
   </ul>
   <li><strong>Anti-Aliasing:</strong> Disable MSAA in game settings for depth detection to work.</li>
   <li><strong>Generic Depth:</strong> Depth Addon must be enabled in ReShade's settings.</li>
